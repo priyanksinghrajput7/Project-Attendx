@@ -1,0 +1,8 @@
+{
+  "name": "Remix AttendX",
+  "description": "Smart College Attendance Management System featuring Student, Faculty, and Admin portals, live QR attendance, analytics, timetables, and reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
