@@ -63,7 +63,7 @@ sealed class ScreenDestination {
 class AttendXViewModel(application: Application) : AndroidViewModel(application) {
 
   private val database = AttendXDatabase.getDatabase(application, viewModelScope)
-  val repository = AttendXRepository(database.attendXDao())
+  val repository = AttendXRepository(database.attendXDao(), application)
 
   // --- CURRENT USER & AUTH ---
   private val _currentUser = MutableStateFlow<UserEntity?>(null)
@@ -185,6 +185,8 @@ class AttendXViewModel(application: Application) : AndroidViewModel(application)
       _activeSessionAttendees.value = emptyList()
       return
     }
+    // Start real-time Firestore synchronization for this session across devices
+    repository.startRealtimeAttendeesSync(sessionId, viewModelScope)
     sessionAttendeesJob = viewModelScope.launch {
       repository.getAttendanceForSession(sessionId).collect { list ->
         _activeSessionAttendees.value = list
@@ -219,6 +221,8 @@ class AttendXViewModel(application: Application) : AndroidViewModel(application)
     viewModelScope.launch(Dispatchers.IO) {
       repository.ensureSeededData()
     }
+    // Listen for live attendance sessions started by faculty across devices
+    repository.startRealtimeSessionSync(viewModelScope)
 
     // Collect active user's records & notifications whenever user changes
     viewModelScope.launch {

@@ -28,6 +28,7 @@ import com.example.data.model.SubjectEntity
 import com.example.data.model.UserEntity
 import com.example.ui.components.QRMatrixView
 import com.example.ui.theme.*
+import com.example.ui.util.QRCodeGenerator
 import kotlinx.coroutines.delay
 
 // -------------------------------------------------------------
@@ -522,9 +523,20 @@ fun FacultyQRSessionScreen(
 
       // Dynamic QR Matrix
       item {
+        val qrPayload = remember(currentDisplayedSession.id, currentDisplayedSession.qrToken) {
+          QRCodeGenerator.buildPayload(
+            sessionId = currentDisplayedSession.id,
+            subjectId = currentDisplayedSession.subjectId,
+            subjectName = currentDisplayedSession.subjectName,
+            qrToken = currentDisplayedSession.qrToken,
+            facultyId = currentDisplayedSession.facultyId,
+            section = currentDisplayedSession.section,
+            room = currentDisplayedSession.room
+          )
+        }
         QRMatrixView(
-          token = currentDisplayedSession.qrToken,
-          size = 210.dp
+          token = qrPayload,
+          size = 220.dp
         )
       }
 

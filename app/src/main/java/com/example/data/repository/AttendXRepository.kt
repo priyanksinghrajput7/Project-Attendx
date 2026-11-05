@@ -11,9 +11,15 @@ import com.example.data.model.NotificationEntity
 import com.example.data.model.SubjectEntity
 import com.example.data.model.TimetableEntity
 import com.example.data.model.UserEntity
+import android.content.Context
+import android.util.Log
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -53,7 +59,161 @@ data class CollegeAnalytics(
   val departmentStats: Map<String, Float>
 )
 
-class AttendXRepository(private val dao: AttendXDao) {
+class AttendXRepository(
+  private val dao: AttendXDao,
+  private val context: Context? = null
+) {
+
+  private val firestore: FirebaseFirestore? by lazy {
+    try {
+      context?.let { ctx ->
+        val dbId = ctx.getString(com.example.R.string.firestore_database_id)
+        if (dbId.isNotBlank()) {
+          FirebaseFirestore.getInstance(dbId)
+        } else null
+      }
+    } catch (e: Exception) {
+      Log.w("AttendXRepo", "Firestore init: ${e.message}")
+      null
+    }
+  }
+
+  private var sessionSyncRegistration: ListenerRegistration? = null
+  private var attendeesSyncRegistration: ListenerRegistration? = null
+
+  /**
+   * Real-time multi-device sync: Listen for active attendance sessions started by faculty
+   * on other devices and reflect them immediately in student's local cache & notification center.
+   */
+  fun startRealtimeSessionSync(scope: CoroutineScope) {
+    val db = firestore ?: return
+    sessionSyncRegistration?.remove()
+    sessionSyncRegistration = db.collection("attendance_sessions")
+      .whereEqualTo("isActive", true)
+      .addSnapshotListener { snapshots, error ->
+        if (error != null || snapshots == null) return@addSnapshotListener
+        scope.launch(Dispatchers.IO) {
+          try {
+            for (doc in snapshots.documents) {
+              val id = doc.getString("id") ?: doc.id
+              val subjectId = doc.getString("subjectId") ?: ""
+              val subjectName = doc.getString("subjectName") ?: ""
+              val facultyId = doc.getString("facultyId") ?: ""
+              val facultyName = doc.getString("facultyName") ?: ""
+              val section = doc.getString("section") ?: "CSE-4A"
+              val room = doc.getString("room") ?: "LT-101"
+              val date = doc.getString("date") ?: ""
+              val startTime = doc.getString("startTime") ?: ""
+              val endTime = doc.getString("endTime") ?: ""
+              val qrToken = doc.getString("qrToken") ?: ""
+              val isActive = doc.getBoolean("isActive") ?: true
+
+              if (isActive && qrToken.isNotBlank()) {
+                val entity = AttendanceSessionEntity(
+                  id = id,
+                  subjectId = subjectId,
+                  subjectName = subjectName,
+                  facultyId = facultyId,
+                  facultyName = facultyName,
+                  section = section,
+                  date = date,
+                  startTime = startTime,
+                  endTime = endTime,
+                  room = room,
+                  status = "ACTIVE",
+                  qrToken = qrToken
+                )
+                dao.insertSession(entity)
+
+                // Ensure student has live alert in Notification Bell
+                dao.insertNotification(
+                  NotificationEntity(
+                    id = "NOTIF-SYNC-$id",
+                    userId = "ALL",
+                    title = "🔔 Live QR Session: $subjectName",
+                    message = "$facultyName has opened live attendance session for $subjectName ($section) in $room. Scan with camera now!",
+                    type = "QR_SESSION",
+                    timestamp = System.currentTimeMillis(),
+                    isRead = false
+                  )
+                )
+
+                // Ensure student has live alert in Notice Board
+                dao.insertNotice(
+                  NoticeEntity(
+                    id = "NOTICE-QR-$id",
+                    title = "🔔 Live QR Session: $subjectName",
+                    content = "$facultyName has opened live attendance session for $subjectName ($section) in $room. Open camera to scan your QR attendance now.",
+                    category = "QR_SESSION",
+                    postedBy = facultyName,
+                    authorId = facultyId,
+                    authorRole = "FACULTY",
+                    postedAt = System.currentTimeMillis(),
+                    priority = "URGENT",
+                    isPinned = true,
+                    targetAudience = section
+                  )
+                )
+              }
+            }
+          } catch (e: Exception) {
+            Log.e("AttendXRepo", "Error syncing session: ${e.message}")
+          }
+        }
+      }
+  }
+
+  /**
+   * Real-time multi-device sync: Listen for student attendance records logged for a specific session
+   * so faculty sees attendees appear instantly on their phone.
+   */
+  fun startRealtimeAttendeesSync(sessionId: String, scope: CoroutineScope) {
+    val db = firestore ?: return
+    attendeesSyncRegistration?.remove()
+    attendeesSyncRegistration = db.collection("attendance_records")
+      .whereEqualTo("sessionId", sessionId)
+      .addSnapshotListener { snapshots, error ->
+        if (error != null || snapshots == null) return@addSnapshotListener
+        scope.launch(Dispatchers.IO) {
+          try {
+            for (doc in snapshots.documents) {
+              val recId = doc.getString("id") ?: doc.id
+              val studentId = doc.getString("studentId") ?: ""
+              val studentName = doc.getString("studentName") ?: ""
+              val studentRoll = doc.getString("studentRollNo") ?: ""
+              val subId = doc.getString("subjectId") ?: ""
+              val subName = doc.getString("subjectName") ?: ""
+              val facId = doc.getString("facultyId") ?: ""
+              val sec = doc.getString("section") ?: ""
+              val d = doc.getString("date") ?: ""
+              val t = doc.getString("time") ?: ""
+              val status = doc.getString("status") ?: "PRESENT"
+
+              if (studentId.isNotBlank()) {
+                val recordEntity = AttendanceRecordEntity(
+                  id = recId,
+                  studentId = studentId,
+                  studentName = studentName,
+                  studentRollNo = studentRoll,
+                  subjectId = subId,
+                  subjectName = subName,
+                  facultyId = facId,
+                  section = sec,
+                  date = d,
+                  time = t,
+                  status = status,
+                  sessionId = sessionId,
+                  markedVia = "QR_CODE"
+                )
+                dao.insertAttendanceRecord(recordEntity)
+              }
+            }
+          } catch (e: Exception) {
+            Log.e("AttendXRepo", "Error syncing attendee: ${e.message}")
+          }
+        }
+      }
+  }
 
   val allUsers: Flow<List<UserEntity>> = dao.getAllUsers()
   val allDepartments: Flow<List<DepartmentEntity>> = dao.getAllDepartments()
@@ -225,6 +385,43 @@ class AttendXRepository(private val dao: AttendXDao) {
       return Result.failure(Exception("QR token cannot be empty."))
     }
 
+    // 1. Check for standard AttendX structured payload: ATTENDX|v1|sessionId|subjectId|subjectName|qrToken|facultyId|section|room|timestamp
+    if (cleanToken.startsWith("ATTENDX|v1|")) {
+      val parts = cleanToken.split("|")
+      if (parts.size >= 7) {
+        val payloadSessionId = parts[2]
+        val payloadSubjectId = parts[3]
+        val payloadSubjectName = parts[4]
+        val payloadQrToken = parts[5]
+        val payloadFacultyId = parts[6]
+        val payloadSection = if (parts.size > 7) parts[7] else "CSE-4A"
+        val payloadRoom = if (parts.size > 8) parts[8] else "LT-101"
+
+        // Ensure session exists in local Room DB for instant offline-first scan verification
+        val existingSession = dao.getActiveSessions().firstOrNull()?.firstOrNull { it.id == payloadSessionId }
+        if (existingSession == null) {
+          val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+          val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+          dao.insertSession(
+            AttendanceSessionEntity(
+              id = payloadSessionId,
+              subjectId = payloadSubjectId,
+              subjectName = payloadSubjectName,
+              facultyId = payloadFacultyId,
+              facultyName = "Faculty",
+              section = payloadSection,
+              date = todayStr,
+              startTime = timeStr,
+              endTime = "",
+              room = payloadRoom,
+              status = "ACTIVE",
+              qrToken = payloadQrToken
+            )
+          )
+        }
+      }
+    }
+
     val activeList = dao.getActiveSessions().firstOrNull() ?: emptyList()
     if (activeList.isEmpty()) {
       return Result.failure(Exception("No active attendance session is open right now. Faculty must start the QR session according to timetable before students can scan."))
@@ -274,6 +471,31 @@ class AttendXRepository(private val dao: AttendXDao) {
       markedVia = "QR_CODE"
     )
     dao.insertAttendanceRecord(record)
+
+    // Sync attendance record to Cloud Firestore so faculty phone receives attendee immediately
+    try {
+      firestore?.collection("attendance_records")?.document("${matchingSession.id}_${student.id}")?.set(
+        mapOf(
+          "id" to record.id,
+          "sessionId" to matchingSession.id,
+          "studentId" to student.id,
+          "studentName" to student.name,
+          "studentRollNo" to student.rollNo,
+          "subjectId" to matchingSession.subjectId,
+          "subjectName" to matchingSession.subjectName,
+          "facultyId" to matchingSession.facultyId,
+          "section" to matchingSession.section,
+          "date" to todayStr,
+          "time" to record.time,
+          "status" to "PRESENT",
+          "markedVia" to "QR_SCAN"
+        )
+      )?.addOnFailureListener { e ->
+        Log.w("AttendXRepo", "Firestore record attendance failed: ${e.message}")
+      }
+    } catch (e: Exception) {
+      Log.w("AttendXRepo", "Firestore write error: ${e.message}")
+    }
 
     // Send notification
     dao.insertNotification(
@@ -330,6 +552,45 @@ class AttendXRepository(private val dao: AttendXDao) {
     )
     dao.insertSession(session)
 
+    // Sync session to Cloud Firestore for multi-device live broadcast
+    try {
+      firestore?.collection("attendance_sessions")?.document(sessionCode)?.set(
+        mapOf(
+          "id" to sessionCode,
+          "subjectId" to subject.id,
+          "subjectName" to subject.name,
+          "facultyId" to faculty.id,
+          "facultyName" to faculty.name,
+          "section" to section,
+          "date" to today,
+          "startTime" to startTime,
+          "endTime" to endTime,
+          "room" to room,
+          "status" to "ACTIVE",
+          "qrToken" to qrToken,
+          "isActive" to true
+        )
+      )?.addOnFailureListener { e ->
+        Log.w("AttendXRepo", "Firestore create session failed: ${e.message}")
+      }
+
+      firestore?.collection("campus_notices")?.document("NOTICE-QR-$sessionCode")?.set(
+        mapOf(
+          "id" to "NOTICE-QR-$sessionCode",
+          "title" to "🔔 Live QR Session: ${subject.name}",
+          "content" to "${faculty.name} has opened live attendance session for ${subject.name} ($section) in $room. Open camera to scan your QR attendance now.",
+          "category" to "QR_SESSION",
+          "priority" to "URGENT",
+          "authorName" to faculty.name,
+          "date" to today,
+          "time" to startTime,
+          "isPinned" to true
+        )
+      )
+    } catch (e: Exception) {
+      Log.w("AttendXRepo", "Firestore broadcast error: ${e.message}")
+    }
+
     // Alert students that a live QR session is open for their subject
     dao.insertNotification(
       NotificationEntity(
@@ -375,6 +636,18 @@ class AttendXRepository(private val dao: AttendXDao) {
 
   suspend fun closeSession(session: AttendanceSessionEntity) {
     dao.updateSession(session.copy(status = "CLOSED"))
+
+    try {
+      firestore?.collection("attendance_sessions")?.document(session.id)?.update(
+        mapOf(
+          "isActive" to false,
+          "status" to "CLOSED"
+        )
+      )
+    } catch (e: Exception) {
+      Log.w("AttendXRepo", "Firestore close session error: ${e.message}")
+    }
+
     dao.insertAuditLog(
       AuditLogEntity(
         id = "LOG-${UUID.randomUUID().toString().take(8)}",

@@ -139,14 +139,24 @@ fun AttendanceScannerScreen(
 
       if (vibrator?.hasVibrator() == true) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          val timings = if (success) longArrayOf(0, 100, 50, 150) else longArrayOf(0, 300)
-          val amplitudes = if (success) intArrayOf(0, 200, 0, 255) else intArrayOf(0, 180)
+          val timings = if (success) longArrayOf(0, 80, 40, 120) else longArrayOf(0, 250)
+          val amplitudes = if (success) intArrayOf(0, 220, 0, 255) else intArrayOf(0, 180)
           vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
         } else {
           @Suppress("DEPRECATION")
           vibrator.vibrate(200)
         }
       }
+
+      // Audio feedback chime like payment apps (PhonePe / Google Pay / Paytm)
+      try {
+        val toneG = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 100)
+        if (success) {
+          toneG.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 180)
+        } else {
+          toneG.startTone(android.media.ToneGenerator.TONE_PROP_NACK, 250)
+        }
+      } catch (_: Exception) {}
     } catch (_: Exception) {}
   }
 

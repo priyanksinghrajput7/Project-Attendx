@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidSession(data) {
+      return data.id is string
+        && data.subjectId is string
+        && data.subjectName is string
+        && data.facultyId is string
+        && data.section is string
+        && data.qrToken is string
+        && data.isActive is bool;
+    }
+
+    function isValidRecord(data) {
+      return data.id is string
+        && data.sessionId is string
+        && data.studentId is string
+        && data.studentName is string
+        && data.subjectId is string
+        && data.status is string
+        && data.markedVia is string;
+    }
+
+    function isValidNotice(data) {
+      return data.id is string
+        && data.title is string
+        && data.content is string
+        && data.category is string;
+    }
+
+    match /attendance_sessions/{sessionId} {
+      allow read: if true;
+      allow create, update: if isValidSession(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /attendance_records/{recordId} {
+      allow read: if true;
+      allow create, update: if isValidRecord(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /campus_notices/{noticeId} {
+      allow read: if true;
+      allow create, update: if isValidNotice(request.resource.data);
+      allow delete: if true;
+    }
+  }
+}

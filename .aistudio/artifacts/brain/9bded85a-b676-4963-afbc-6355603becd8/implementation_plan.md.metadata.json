@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan for faculty live QR session notifications in the notice center and strict camera-only QR attendance scanning without manual bypasses.",
-  "updatedAt": "2026-11-05T14:34:55.551384950Z",
+  "summary": "Plan for cross-device Firestore real-time sync, ISO-standard QR matrix encoding, and instant payment-style camera QR scanning for AttendX.",
+  "updatedAt": "2026-11-05T16:13:45.707147964Z",
   "requestFeedback": true,
   "userFacing": true
 }

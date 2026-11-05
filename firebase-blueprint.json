@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "AttendanceSession": {
+      "title": "AttendanceSession",
+      "description": "Live attendance QR session created by faculty for a subject lecture",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "facultyName": { "type": "string" },
+        "section": { "type": "string" },
+        "room": { "type": "string" },
+        "qrToken": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "date": { "type": "string" },
+        "startTime": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "subjectId", "subjectName", "facultyId", "section", "qrToken", "isActive"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Student attendance record created upon camera scanning live QR session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentRollNo": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "section": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "status": { "type": "string" },
+        "markedVia": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "sessionId", "studentId", "studentName", "subjectId", "status", "markedVia"]
+    },
+    "CampusNotice": {
+      "title": "CampusNotice",
+      "description": "Broadcast notice such as active QR session alerts or department announcements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "priority": { "type": "string" },
+        "authorName": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "isPinned": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "content", "category", "priority"]
+    }
+  },
+  "firestore": {
+    "/attendance_sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/AttendanceSession" },
+      "description": "Active and past faculty attendance sessions"
+    },
+    "/attendance_records/{recordId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Individual attendance records logged by students scanning QR"
+    },
+    "/campus_notices/{noticeId}": {
+      "schema": { "$ref": "#/entities/CampusNotice" },
+      "description": "Urgent notifications and broadcast campus notices"
+    }
+  }
+}

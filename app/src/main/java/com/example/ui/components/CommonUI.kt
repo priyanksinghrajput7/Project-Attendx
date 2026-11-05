@@ -5,9 +5,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.asImageBitmap
+import com.example.ui.util.QRCodeGenerator
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -402,75 +405,36 @@ fun SubjectProgressBar(
 fun QRMatrixView(
   token: String,
   modifier: Modifier = Modifier,
-  size: Dp = 180.dp
+  size: Dp = 220.dp
 ) {
+  val qrBitmap = remember(token) {
+    QRCodeGenerator.generateQRCodeBitmap(token, 512, 512)
+  }
+
   Card(
     modifier = modifier.size(size),
     shape = RoundedCornerShape(16.dp),
     colors = CardDefaults.cardColors(containerColor = Color.White),
-    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
   ) {
     Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(16.dp),
+        .padding(12.dp),
       contentAlignment = Alignment.Center
     ) {
-      Canvas(modifier = Modifier.fillMaxSize()) {
-        val gridSize = 19
-        val cellWidth = this.size.width / gridSize
-        val cellHeight = this.size.height / gridSize
-
-        // Helper to draw QR finder corners (7x7 outer square, 3x3 inner square)
-        fun drawFinderPattern(startX: Int, startY: Int) {
-          // Outer border (7x7)
-          drawRoundRect(
-            color = Color.Black,
-            topLeft = Offset(startX * cellWidth, startY * cellHeight),
-            size = Size(7 * cellWidth, 7 * cellHeight),
-            cornerRadius = CornerRadius(cellWidth * 0.8f)
-          )
-          // Inner clear (5x5)
-          drawRoundRect(
-            color = Color.White,
-            topLeft = Offset((startX + 1) * cellWidth, (startY + 1) * cellHeight),
-            size = Size(5 * cellWidth, 5 * cellHeight),
-            cornerRadius = CornerRadius(cellWidth * 0.5f)
-          )
-          // Center solid (3x3)
-          drawRoundRect(
-            color = Color.Black,
-            topLeft = Offset((startX + 2) * cellWidth, (startY + 2) * cellHeight),
-            size = Size(3 * cellWidth, 3 * cellHeight),
-            cornerRadius = CornerRadius(cellWidth * 0.4f)
-          )
-        }
-
-        // 3 Corner Finder Patterns
-        drawFinderPattern(0, 0)
-        drawFinderPattern(gridSize - 7, 0)
-        drawFinderPattern(0, gridSize - 7)
-
-        // Seeded random pseudo-dots based on token characters
-        val seed = token.hashCode()
-        for (row in 0 until gridSize) {
-          for (col in 0 until gridSize) {
-            val inFinder1 = row < 7 && col < 7
-            val inFinder2 = row < 7 && col >= gridSize - 7
-            val inFinder3 = row >= gridSize - 7 && col < 7
-            if (inFinder1 || inFinder2 || inFinder3) continue
-
-            val hash = ((seed xor (row * 31 + col * 17)) + (row * col))
-            if (hash % 3 == 0 || (row % 2 == 0 && col % 3 == 0) || (row == 8 && col % 2 == 0)) {
-              drawRoundRect(
-                color = Color.Black,
-                topLeft = Offset(col * cellWidth, row * cellHeight),
-                size = Size(cellWidth * 0.88f, cellHeight * 0.88f),
-                cornerRadius = CornerRadius(cellWidth * 0.2f)
-              )
-            }
-          }
-        }
+      if (qrBitmap != null) {
+        Image(
+          bitmap = qrBitmap.asImageBitmap(),
+          contentDescription = "Standard Live Attendance QR Code",
+          modifier = Modifier.fillMaxSize()
+        )
+      } else {
+        CircularProgressIndicator(
+          modifier = Modifier.size(36.dp),
+          color = Indigo600,
+          strokeWidth = 3.dp
+        )
       }
     }
   }
